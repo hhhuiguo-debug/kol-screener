@@ -1,5 +1,4 @@
-```text
-   streamlit
-   pandas
-   numpy
-   openpyxl
+streamlit
+pandas
+numpy
+openpyxl
