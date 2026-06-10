@@ -19,10 +19,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-title">🎯 KOL Screener v1.0</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">基于多维匹配度、粉丝价值与真实互动率的 Lymow 割草机海外网红精准筛选系统（动态上传版）</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">基于多维匹配度、粉丝价值与真实互动率的 Lymow 割草机海外网红精准筛选系统（动态总结版）</div>', unsafe_allow_html=True)
 st.write("---")
 
-# 2. 内置的 12 位原始备用数据（当用户没上传文件时展示，确保页面不空白）
+# 2. 内置的 12 位原始备用数据（当用户没上传文件时展示）
 def load_default_data():
     raw_data = {
         'KOL 账号': ['@LawnKingUS', '@SmartYardLife', '@TechGadgetReview', '@OutdoorLivingPro', 
@@ -42,22 +42,20 @@ def load_default_data():
 st.write("### 📤 第一步：上传您的网红数据表")
 uploaded_file = st.file_uploader("支持从电脑拖拽或选择现有的 Excel (.xlsx) 或 CSV 文件", type=["xlsx", "csv"])
 
-# 初始化加载数据逻辑
 if uploaded_file is not None:
     try:
         if uploaded_file.name.endswith('.xlsx'):
             df_raw = pd.read_excel(uploaded_file)
         else:
             df_raw = pd.read_csv(uploaded_file)
-        st.success(f"🎉 成功成功载入新文件: {uploaded_file.name}，共检测到 {len(df_raw)} 行数据！")
+        st.success(f"🎉 成功载入新文件: {uploaded_file.name}，共检测到 {len(df_raw)} 行数据！")
     except Exception as e:
-        st.error(f"❌ 读取文件出错，请确保表格格式正常。错误详情: {e}")
+        st.error(f"❌ 读取文件出错。错误详情: {e}")
         df_raw = load_default_data()
 else:
     st.info("💡 当前正在使用系统内置的 12 位原始测试达人数据。您随时可以上传您自己的表格进行批量覆盖计算。")
     df_raw = load_default_data()
 
-# 统一清洗和检查表格列名是否匹配，不匹配则提示错误
 required_cols = ['KOL 账号', '平台', '粉丝数', '互动率', '受众地区', '内容形式']
 missing_cols = [col for col in required_cols if col not in df_raw.columns]
 
@@ -65,11 +63,10 @@ if missing_cols:
     st.error(f"⚠️ 您上传的表格中缺少以下必要的列名，请检查表头字段: {missing_cols}")
     st.stop()
 
-# 确保“内容相关度”存在，如果没有则默认补全
 if '内容相关度' not in df_raw.columns:
     df_raw['内容相关度'] = 100 
 if '综合得分' not in df_raw.columns:
-    df_raw['综合得分'] = 0  # 若无原得分，则对比原排名的功能会自动忽略
+    df_raw['综合得分'] = 0
 
 # 4. 侧边栏：交互式权重调优面板与筛选器
 st.sidebar.header("⚙️ 权重与参数配置中心")
@@ -91,13 +88,11 @@ selected_platform = st.sidebar.multiselect("包含平台", options=platforms_ava
 min_followers = st.sidebar.number_input("最低粉丝量限制", min_value=0, value=0, step=50000)
 
 # 5. 后台动态匹配度智能映射算法
-# 建立一个基于关键字模糊匹配字典，自动适应任何新上传表格里的国家/场景标签
 def calculate_dynamic_match_score(row):
     region = str(row['受众地区']).lower()
     content = str(row['内容形式']).lower()
     account = str(row['KOL 账号'])
     
-    # 特殊的硬编码覆盖（兼容原始12位博主）
     special_defaults = {
         '@LawnKingUS': 10, '@SmartYardLife': 10, '@TechGadgetReview': 6, '@OutdoorLivingPro': 9, 
         '@HomeAutomationHub': 7, '@GardenDesignDaily': 8, '@WinterPrep2025': 10, '@SuburbanDadLife': 8, 
@@ -107,8 +102,6 @@ def calculate_dynamic_match_score(row):
         return special_defaults[account]
         
     score = 5 # 默认基础分
-    
-    # 地理受众标签加减分控制 (突出雪区、大草坪和欧洲五国核心区)
     if 'snow' in region or 'northeast' in region or 'winter' in region:
         score += 3
     if 'midwest' in region or 'yard' in region or 'lawn' in region:
@@ -118,7 +111,6 @@ def calculate_dynamic_match_score(row):
     if 'global' in region or 'national' in region:
         score -= 1
         
-    # 内容/场景标签加减分控制
     if 'lawn' in content or 'garden' in content or '园艺' in content or '草坪' in content:
         score += 2
     if 'vlog' in content or 'lifestyle' in content or '生活' in content:
@@ -132,7 +124,6 @@ def calculate_dynamic_match_score(row):
 
 df_raw['产品匹配度(10分制)'] = df_raw.apply(calculate_dynamic_match_score, axis=1)
 
-# 数据归一化标准化映射函数
 def scale_to_hundred(series):
     if series.max() == series.min():
         return 100
@@ -143,7 +134,6 @@ df_raw['互动率得分'] = scale_to_hundred(df_raw['互动率'])
 df_raw['相关度得分'] = scale_to_hundred(df_raw['内容相关度'])
 df_raw['匹配度得分'] = scale_to_hundred(df_raw['产品匹配度(10分制)'])
 
-# 动态核心重算得分
 df_raw['V1.0综合得分'] = (
     df_raw['粉丝得分'] * w_followers + 
     df_raw['互动率得分'] * w_engagement + 
@@ -151,12 +141,10 @@ df_raw['V1.0综合得分'] = (
     df_raw['匹配度得分'] * w_match
 ).round(1)
 
-# 生成计算新排名
 df_raw['新排名'] = df_raw['V1.0综合得分'].rank(ascending=False, method='min').astype(int)
 df_raw['原排名'] = df_raw['综合得分'].rank(ascending=False, method='min').astype(int)
 df_raw['排名变化'] = df_raw['原排名'] - df_raw['新排名']
 
-# 执行数据过滤器过滤
 processed_df = df_raw[
     (df_raw['平台'].isin(selected_platform)) & 
     (df_raw['粉丝数'] >= min_followers)
@@ -179,14 +167,13 @@ else:
 
     st.write(" ")
     
-    # 格式化数据便于前端阅读
     display_df = processed_df[[
         '新排名', '原排名', '排名变化', 'KOL 账号', '平台', '粉丝数', '互动率', 
         '受众地区', '内容形式', '产品匹配度(10分制)', 'V1.0综合得分', '综合得分'
     ]].copy()
 
     def format_trend(val):
-        if val > 100 or val < -100: return "—" # 说明没有原排名参考
+        if val > 100 or val < -100: return "—"
         if val > 0: return f"▲ {val}"
         elif val < 0: return f"▼ {abs(val)}"
         return "—"
@@ -207,12 +194,50 @@ else:
         hide_index=True
     )
 
+    # 7. 📥 动态生成底部总结报告与风险点（根据筛选结果智能计算）
+    st.write("---")
+    st.write("### 💡 自动生成的决策总结与风险规避报告")
+    
+    tab_tops, tab_risks = st.tabs(["🚀 排名前 3 核心优势与评分透视", "⚠️ 投资报酬率 (ROI) 潜在风险规避"])
+    
+    # 动态抓取当前的前三名和后三名
+    top_kol_list = processed_df.head(3).to_dict('records')
+    bottom_kol_list = processed_df.tail(3).to_dict('records')
+    
+    with tab_tops:
+        st.markdown("#### **🔥 本轮计算排名前 3 位达人深度透视：**")
+        for i, kol in enumerate(top_kol_list):
+            rank_icon = ["🥇", "🥈", "🥉"][i] if i < 3 else "⭐"
+            followers_fmt = f"{kol['粉丝数']/10000:.1f}万" if kol['粉丝数']>=10000 else f"{kol['粉丝数']}"
+            engagement_fmt = f"{kol['互动率']*100:.1f}%"
+            
+            st.info(f"""
+            **{rank_icon} 第 {i+1} 名：{kol['KOL 账号']}** ({kol['平台']}) 
+            * **实时总得分**：`{kol['V1.0综合得分']} 分` | **受众区域**：`{kol['受众地区']}` | **内容标签**：`{kol['内容形式']}`
+            * **核心优势总结**：该达人在 **产品匹配度维度拿到了 {kol['产品匹配度(10分制)']} 分（满分10分）**。其受众高度集中在 Lymow 核心销售潜力区（如庭院文化盛行的中西部、或是具有冬春两季换季刚需的北美雪区/欧洲核心区），配合 **{engagement_fmt} 的高互动表现**，其流量的含金量极高，可作为本轮营销的**首选主推种子博主**。
+            """)
+            
+    with tab_risks:
+        st.markdown("#### **⚠️ 投资踩坑预警：以下博主需关注的风险点：**")
+        if len(bottom_kol_list) > 0:
+            for kol in reversed(bottom_kol_list): # 从倒数第一名开始往前排风险
+                followers_fmt = f"{kol['粉丝数']/10000:.1f}万" if kol['粉丝数']>=10000 else f"{kol['粉丝数']}"
+                engagement_fmt = f"{kol['互动率']*100:.1f}%"
+                
+                st.warning(f"""
+                **❌ 潜在低转化预警：{kol['KOL 账号']}** ({kol['平台']})
+                * **实时总得分**：`{kol['V1.0综合得分']} 分` | **粉丝量级**：`{followers_fmt}` | **真实互动率**：`{engagement_fmt}`
+                * **潜在风险评估**：虽然该博主可能**拥有较可观的粉丝基数**，但在新版漏斗的筛选下其得分仅为 `{kol['V1.0综合得分']}`。核心风险在于其**产品匹配度较低（仅获 {kol['产品匹配度(10分制)']} 分）**。受众主要偏向全球泛科技新闻、大众女性生活方式或纯运动圈层，绝大多数粉丝**缺乏独立的私人院落场景**。盲目给此类博主投递高单价的履带割草机进行样机评测，容易造成严重的预算浪费与流量错配（即“赚了播放量，输了订单量”）。建议**暂时放弃或将其排在梯队末尾**。
+                """)
+        else:
+            st.write("没有检测到低分达人。")
+
     # 导出结果按钮
-    st.write(" ")
+    st.write("---")
     csv_buffer = processed_df.to_csv(index=False).encode('utf-8-sig')
     st.download_button(
-        label="📥 导出当前排好名的网红计算结果 (CSV)",
+        label="📥 一键导出排好名的网红数据与评分结果 (CSV)",
         data=csv_buffer,
-        file_name="Lymow_KOL_Screener_Results.csv",
+        file_name="Lymow_KOL_Screener_Final_Report.csv",
         mime="text/csv"
     )
